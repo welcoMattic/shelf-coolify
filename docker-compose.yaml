@@ -127,7 +127,6 @@ services:
         ALTER USER authenticator WITH PASSWORD :'pw';
         ALTER USER pgbouncer WITH PASSWORD :'pw';
         ALTER USER supabase_auth_admin WITH PASSWORD :'pw';
-        ALTER USER supabase_functions_admin WITH PASSWORD :'pw';
         ALTER USER supabase_storage_admin WITH PASSWORD :'pw';
         ALTER DATABASE postgres SET "app.settings.jwt_secret" TO :'jwtsecret';
         ALTER DATABASE postgres SET "app.settings.jwt_exp" TO '3600';
