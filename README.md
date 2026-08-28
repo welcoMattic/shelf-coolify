@@ -112,6 +112,8 @@ coolify app create public \
 
 Note : chaque mise à jour du repo se redéploie depuis l'UI (bouton Deploy), qui re-pull le repo et l'image.
 
+En CLI, le domaine se pose après un premier déploiement (qui charge le compose) : Settings > Domains dans l'UI, ou `PATCH /api/v1/applications/<uuid>` avec `{"docker_compose_domains": {"shelf": {"name": "shelf", "domain": "https://shelf.example.com"}}}`. Les magic vars (`SERVICE_URL_SHELF`, donc `SERVER_URL`) se réconcilient sur ce domaine au déploiement suivant.
+
 #### Option B : le script API (service "Docker Compose (Empty)")
 
 Avec le script :
