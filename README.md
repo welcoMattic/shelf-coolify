@@ -80,7 +80,7 @@ Il n'y a plus qu'une seule configuration SMTP, partagée par les deux surfaces :
 - **SMTP côté GoTrue** : envoie les emails d'OTP de connexion (shelf déclenche `auth.signInWithOtp`, c'est le mailer GoTrue qui envoie).
 - **SMTP côté shelf** : envoie les emails applicatifs (invitations, réservations).
 
-Les MÊMES variables `SMTP_*` (voir `.env.example`) sont utilisées pour les deux. Sans SMTP, la stack démarre mais aucun email ne part (donc pas de connexion par OTP).
+Les MÊMES variables `SMTP_*` (voir `.env.example`) sont utilisées pour les deux. Sans vraies valeurs SMTP, la stack démarre (des placeholders sont fournis par défaut, shelf exigeant ces variables au boot) mais aucun email ne part, donc pas de connexion par OTP. `MAPTILER_TOKEN` est aussi exigée au boot : un placeholder est fourni, les cartes restent inactives sans vrai token.
 
 ## Vérifier
 

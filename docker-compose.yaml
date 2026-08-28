@@ -18,13 +18,16 @@ services:
       - SUPABASE_URL=${SERVICE_URL_SUPABASE_KONG}
       - SUPABASE_ANON_PUBLIC=${SERVICE_SUPABASEANON_KEY}
       - SUPABASE_SERVICE_ROLE=${SERVICE_SUPABASESERVICE_KEY}
-      # SMTP applicatif de shelf (invitations, réservations), voir .env.example
-      - SMTP_HOST=${SMTP_HOST}
+      # SMTP applicatif de shelf (invitations, réservations), voir .env.example.
+      # Shelf exige ces variables au boot : placeholders par défaut, l'app
+      # démarre mais n'enverra aucun email tant que les vraies valeurs manquent.
+      - SMTP_HOST=${SMTP_HOST:-smtp.example.com}
       - SMTP_PORT=${SMTP_PORT:-465}
-      - SMTP_USER=${SMTP_USER}
-      - SMTP_PWD=${SMTP_PWD}
-      - SMTP_FROM=${SMTP_FROM}
-      - MAPTILER_TOKEN=${MAPTILER_TOKEN:-}
+      - SMTP_USER=${SMTP_USER:-user@example.com}
+      - SMTP_PWD=${SMTP_PWD:-changeme}
+      - SMTP_FROM=${SMTP_FROM:-Shelf <noreply@example.com>}
+      # Requis au boot par shelf : placeholder par défaut, cartes inactives sans vrai token
+      - MAPTILER_TOKEN=${MAPTILER_TOKEN:-changeme}
       - GEOCODING_USER_AGENT=${GEOCODING_USER_AGENT:-Shelf self-hosted}
       - ENABLE_PREMIUM_FEATURES=false
       - DISABLE_SIGNUP=false  # passer à true après la création du premier compte
