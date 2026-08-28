@@ -4,6 +4,10 @@
 services:
   shelf:
     image: ghcr.io/shelf-nu/shelf.nu:latest
+    # L'image n'a pas d'EXPOSE : sans lui, le proxy Coolify (Traefik) ne sait
+    # pas inférer le port du conteneur et répond 503.
+    expose:
+      - "8080"
     environment:
       # Routage proxy Coolify vers le port 8080 du conteneur
       - SERVICE_FQDN_SHELF_8080
