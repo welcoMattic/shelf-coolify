@@ -1,0 +1,53 @@
+# shelf.yml : compose adapté pour un service Coolify "Docker Compose (Empty)".
+# Service applicatif + job one-shot de migrations Prisma.
+services:
+  shelf:
+    image: ghcr.io/shelf-nu/shelf.nu:latest
+    environment:
+      # Routage proxy Coolify vers le port 8080 du conteneur
+      - SERVICE_FQDN_SHELF_8080
+      - SERVER_URL=${SERVICE_URL_SHELF}
+      # Secrets auto-générés par Coolify (magic vars)
+      - SESSION_SECRET=${SERVICE_BASE64_64_SHELFSESSION}
+      - INVITE_TOKEN_SECRET=${SERVICE_BASE64_64_SHELFINVITE}
+      - FINGERPRINT=${SERVICE_BASE64_64_SHELFFINGERPRINT}
+      # Valeurs externes, à renseigner dans l'UI Coolify (voir .env.example)
+      - DATABASE_URL=${DATABASE_URL}
+      - DIRECT_URL=${DIRECT_URL}
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_ANON_PUBLIC=${SUPABASE_ANON_PUBLIC}
+      - SUPABASE_SERVICE_ROLE=${SUPABASE_SERVICE_ROLE}
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT:-465}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PWD=${SMTP_PWD}
+      - SMTP_FROM=${SMTP_FROM}
+      - MAPTILER_TOKEN=${MAPTILER_TOKEN:-}
+      - GEOCODING_USER_AGENT=${GEOCODING_USER_AGENT:-Shelf self-hosted}
+      - ENABLE_PREMIUM_FEATURES=false
+      - DISABLE_SIGNUP=false  # passer à true après la création du premier compte
+      - SEND_ONBOARDING_EMAIL=false
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      # L'image (node:22-slim) n'a ni curl ni wget : on sonde avec node + fetch
+      test: ["CMD", "node", "-e", "fetch('http://localhost:8080/healthcheck').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+    restart: unless-stopped
+
+  # Job one-shot : applique les migrations Prisma à chaque déploiement.
+  # S'affiche "exited" après exit 0 dans Coolify, c'est normal.
+  # working_dir /src : répertoire neutre, évite que la CLI prisma ne charge les
+  # prisma.config.ts présents dans l'image (ils requièrent des outils absents).
+  migrate:
+    image: ghcr.io/shelf-nu/shelf.nu:latest
+    working_dir: /src
+    entrypoint: ["npx", "-y", "prisma@6.19.3", "migrate", "deploy", "--schema", "/src/packages/database/prisma/schema.prisma"]
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - DIRECT_URL=${DIRECT_URL}
+    restart: "no"
