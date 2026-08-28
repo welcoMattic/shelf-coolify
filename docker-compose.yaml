@@ -107,9 +107,6 @@ services:
       - supabase-db-data:/var/lib/postgresql/data
       # Volume nommé : persiste la clé de déchiffrement pgsodium entre redémarrages
       - supabase-db-config:/etc/postgresql-custom
-      # Scripts d'init (premier boot uniquement) : mots de passe des rôles + secret JWT
-      - ./supabase/db/roles.sql:/docker-entrypoint-initdb.d/init-scripts/99-roles.sql
-      - ./supabase/db/jwt.sql:/docker-entrypoint-initdb.d/init-scripts/99-jwt.sql
     healthcheck:
       test: pg_isready -U postgres -h 127.0.0.1
       interval: 5s
@@ -117,11 +114,40 @@ services:
       retries: 10
     restart: unless-stopped
 
-  supabase-auth:
-    image: supabase/gotrue:v2.186.0
+  # Job one-shot idempotent : mots de passe des rôles internes + secret JWT en base.
+  # (Remplace les scripts initdb : les bind mounts de fichiers ne sont pas
+  # disponibles dans le build pack Docker Compose de Coolify.)
+  db-init:
+    image: supabase/postgres:15.8.1.085
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      # Le SQL passe par stdin : psql n'interpole pas les variables dans -c
+      - |
+        psql -v ON_ERROR_STOP=1 -v pw="$$PGPASSWORD" -v jwtsecret="$$JWT_SECRET" <<'SQL'
+        ALTER USER authenticator WITH PASSWORD :'pw';
+        ALTER USER pgbouncer WITH PASSWORD :'pw';
+        ALTER USER supabase_auth_admin WITH PASSWORD :'pw';
+        ALTER USER supabase_functions_admin WITH PASSWORD :'pw';
+        ALTER USER supabase_storage_admin WITH PASSWORD :'pw';
+        ALTER DATABASE postgres SET "app.settings.jwt_secret" TO :'jwtsecret';
+        ALTER DATABASE postgres SET "app.settings.jwt_exp" TO '3600';
+        SQL
+    environment:
+      - PGHOST=supabase-db
+      - PGUSER=postgres
+      - PGPASSWORD=${SERVICE_PASSWORD_POSTGRES}
+      - PGDATABASE=postgres
+      - JWT_SECRET=${SERVICE_PASSWORD_JWT}
     depends_on:
       supabase-db:
         condition: service_healthy
+    restart: "no"
+
+  supabase-auth:
+    image: supabase/gotrue:v2.186.0
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:9999/health"]
       timeout: 5s
@@ -168,8 +194,8 @@ services:
   supabase-rest:
     image: postgrest/postgrest:v14.6
     depends_on:
-      supabase-db:
-        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
     environment:
       - PGRST_DB_URI=postgres://authenticator:${SERVICE_PASSWORD_POSTGRES}@supabase-db:5432/postgres
       - PGRST_DB_SCHEMAS=public,storage,graphql_public
@@ -186,8 +212,8 @@ services:
   supabase-storage:
     image: supabase/storage-api:v1.44.2
     depends_on:
-      supabase-db:
-        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
       supabase-rest:
         condition: service_started
       imgproxy:
@@ -250,8 +276,9 @@ services:
     restart: unless-stopped
 
   supabase-kong:
-    image: kong/kong:3.9.1
-    entrypoint: ["bash", "/home/kong/kong-entrypoint.sh"]
+    # Image construite depuis le repo : embarque kong.yml et l'entrypoint
+    # (les bind mounts de fichiers ne sont pas disponibles dans ce build pack).
+    build: ./supabase/kong
     environment:
       # FQDN public de l'API Supabase (utilisé par le navigateur), port 8000
       - SERVICE_FQDN_SUPABASEKONG_8000
@@ -272,9 +299,6 @@ services:
       - KONG_STORAGE_READ_TIMEOUT=3600
       - KONG_STORAGE_REQUEST_BUFFERING=false
       - KONG_STORAGE_RESPONSE_BUFFERING=false
-    volumes:
-      - ./supabase/kong/kong-entrypoint.sh:/home/kong/kong-entrypoint.sh
-      - ./supabase/kong/kong.yml:/home/kong/temp.yml
     healthcheck:
       test: ["CMD", "kong", "health"]
       interval: 5s
