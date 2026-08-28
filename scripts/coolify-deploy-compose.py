@@ -7,16 +7,16 @@ La CLI communautaire `coolify` ne sait pas créer un service "Docker Compose
 (encodé en base64) contient le compose.
 
 Exemples:
-  # Création avec le fichier shelf.yml
-  ./scripts/coolify-deploy-compose.py --compose ./shelf.yml --name shelf \\
+  # Création avec le fichier docker-compose.yml
+  ./scripts/coolify-deploy-compose.py --compose ./docker-compose.yml --name shelf \\
       --domain shelf.example.com --project "Mon Projet"
 
   # Prévisualiser le payload sans rien créer
-  ./scripts/coolify-deploy-compose.py --compose ./shelf.yml --name shelf \\
+  ./scripts/coolify-deploy-compose.py --compose ./docker-compose.yml --name shelf \\
       --domain shelf.example.com --project "Mon Projet" --dry-run
 
   # Mettre à jour le compose d'un service existant et redéployer
-  ./scripts/coolify-deploy-compose.py --compose ./shelf.yml --update <uuid> --deploy
+  ./scripts/coolify-deploy-compose.py --compose ./docker-compose.yml --update <uuid> --deploy
 
 Authentification:
   Priorité 1: variables d'environnement COOLIFY_URL et COOLIFY_TOKEN.
@@ -103,7 +103,7 @@ def resolve(fqdn, tok, args):
 
 def main():
     ap = argparse.ArgumentParser(description="Déploie un docker-compose custom sur Coolify.")
-    ap.add_argument("--compose", required=True, help="Chemin du fichier docker-compose (ex: ./shelf.yml)")
+    ap.add_argument("--compose", required=True, help="Chemin du fichier docker-compose (ex: ./docker-compose.yml)")
     ap.add_argument("--name", help="Nom du service (requis en création)")
     ap.add_argument("--update", metavar="UUID", help="UUID d'un service existant à mettre à jour (PATCH)")
     ap.add_argument("--domain", help="FQDN à épingler, ex: shelf.example.com")

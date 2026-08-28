@@ -1,4 +1,4 @@
-# shelf.yml : compose adapté pour un service Coolify "Docker Compose (Empty)".
+# docker-compose.yml : compose adapté pour un service Coolify "Docker Compose (Empty)" ou un déploiement 1 clic via repo public.
 # Service applicatif + job one-shot de migrations Prisma.
 services:
   shelf:

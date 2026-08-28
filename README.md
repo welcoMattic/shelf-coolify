@@ -1,6 +1,6 @@
 # shelf-coolify
 
-Déploie [shelf.nu](https://github.com/shelf-nu/shelf.nu) (gestion d'inventaire open source) sur une instance [Coolify](https://coolify.io) auto-hébergée, sous forme d'un service "Docker Compose (Empty)", avec Supabase Cloud pour la base de données, l'authentification et le stockage.
+Déploie [shelf.nu](https://github.com/shelf-nu/shelf.nu) (gestion d'inventaire open source) sur une instance [Coolify](https://coolify.io) auto-hébergée, en liant directement ce repo public (build pack Docker Compose), avec Supabase Cloud pour la base de données, l'authentification et le stockage.
 
 ## Architecture
 
@@ -13,7 +13,7 @@ Déploie [shelf.nu](https://github.com/shelf-nu/shelf.nu) (gestion d'inventaire 
 - Une instance [Coolify](https://coolify.io) v4.x et un token API (permissions write + deploy)
 - Un compte [Supabase](https://supabase.com) et un projet créé
 - Un fournisseur SMTP (indispensable en production, voir "Les deux surfaces SMTP")
-- Python 3 pour le script de déploiement (stdlib seule)
+- Python 3 pour le script de déploiement (stdlib seule, optionnel : seulement pour l'option B)
 
 ## Étapes de déploiement
 
@@ -87,14 +87,39 @@ Il y a **deux configurations SMTP distinctes** dans ce déploiement :
 
 Les deux peuvent pointer vers le même fournisseur.
 
-### 3. Créer le service sur Coolify
+### 3. Déployer sur Coolify
 
-Avec le script (recommandé) :
+#### Option A (recommandée) : Lier le repo public (1 clic)
+
+1. UI Coolify > + New > Public Repository
+2. URL du repo : `https://github.com/welcoMattic/shelf-coolify`, branche `main`
+3. Build pack : **Docker Compose** (le compose est à `/docker-compose.yml`, l'emplacement par défaut)
+4. Créer, puis renseigner les variables de `.env.example` dans Environment Variables, associer le domaine au service shelf (port 8080), et Deploy.
+
+Équivalent CLI :
+
+```bash
+coolify app create public \
+  --server-uuid <uuid-serveur> \
+  --project-uuid <uuid-projet> \
+  --environment-name production \
+  --git-repository "https://github.com/welcoMattic/shelf-coolify" \
+  --git-branch main \
+  --build-pack dockercompose \
+  --ports-exposes 8080 \
+  --name shelf
+```
+
+Note : chaque mise à jour du repo se redéploie depuis l'UI (bouton Deploy), qui re-pull le repo et l'image.
+
+#### Option B : le script API (service "Docker Compose (Empty)")
+
+Avec le script :
 
 ```bash
 # Prévisualiser ce qui va partir, sans rien créer
 ./scripts/coolify-deploy-compose.py \
-  --compose ./shelf.yml \
+  --compose ./docker-compose.yml \
   --name shelf \
   --domain shelf.example.com \
   --project "Mon Projet" \
@@ -102,7 +127,7 @@ Avec le script (recommandé) :
 
 # Créer le service (sans déployer : les variables restent à renseigner)
 ./scripts/coolify-deploy-compose.py \
-  --compose ./shelf.yml \
+  --compose ./docker-compose.yml \
   --name shelf \
   --domain shelf.example.com \
   --project "Mon Projet"
@@ -113,9 +138,11 @@ Authentification du script :
 - priorité aux variables d'environnement `COOLIFY_URL` et `COOLIFY_TOKEN` ;
 - sinon lecture de `~/.config/coolify/config.json` (config de la CLI `coolify`) : instance marquée default, ou l'unique instance utilisable, avec `--context` pour en choisir une explicitement.
 
-Sans le script : UI Coolify > + New > Docker Compose Empty, collez le contenu de `shelf.yml`, associez votre domaine au service `shelf` (port 8080).
+Sans le script : UI Coolify > + New > Docker Compose Empty, collez le contenu de `docker-compose.yml`, associez votre domaine au service `shelf` (port 8080).
 
-Après création du service, quelle que soit la méthode :
+Note : cette option copie le compose dans Coolify au lieu de suivre le repo. Les mises à jour du compose passent alors par `--update`.
+
+Après création, quelle que soit l'option :
 
 1. Service > Environment Variables : renseignez les variables listées dans `.env.example` avec les vraies valeurs copiées depuis Supabase. Les secrets `SESSION_SECRET`, `INVITE_TOKEN_SECRET` et `FINGERPRINT` sont générés par Coolify au premier déploiement (magic vars `SERVICE_BASE64_64_*`), rien à faire pour eux.
 2. Déployez : bouton Deploy, ou `coolify deploy uuid <uuid-du-service>`.
@@ -142,11 +169,11 @@ curl -sS -o /dev/null -w "%{http_code}\n" https://shelf.example.com
 
 ## Mise à jour
 
-- **Nouvelle version de shelf.nu** : un redéploiement Coolify re-pull `ghcr.io/shelf-nu/shelf.nu:latest`, et le service `migrate` applique les migrations éventuelles.
-- **Modification du compose** :
+- **Option A (repo lié)** : chaque mise à jour (ce dépôt ou `shelf.nu:latest`) se redéploie depuis l'UI Coolify (bouton Deploy), qui re-pull le repo et l'image. Le service `migrate` applique alors les migrations éventuelles.
+- **Option B (script)** : une nouvelle version de shelf.nu ou une modification du compose se déploie via :
 
   ```bash
-  ./scripts/coolify-deploy-compose.py --compose ./shelf.yml --update <uuid-du-service> --deploy
+  ./scripts/coolify-deploy-compose.py --compose ./docker-compose.yml --update <uuid-du-service> --deploy
   ```
 
 ## Ressources
