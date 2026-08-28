@@ -86,7 +86,10 @@ services:
     restart: "no"
 
   supabase-db:
-    image: supabase/postgres:15.8.1.085
+    # Image construite depuis le repo : embarque les scripts d'init
+    # (mots de passe des rôles + secret JWT), exécutés en superuser au
+    # premier boot du volume, comme dans le template Supabase de Coolify.
+    build: ./supabase/db
     command:
       - postgres
       - -c
@@ -114,39 +117,11 @@ services:
       retries: 10
     restart: unless-stopped
 
-  # Job one-shot idempotent : mots de passe des rôles internes + secret JWT en base.
-  # (Remplace les scripts initdb : les bind mounts de fichiers ne sont pas
-  # disponibles dans le build pack Docker Compose de Coolify.)
-  db-init:
-    image: supabase/postgres:15.8.1.085
-    entrypoint: ["/bin/sh", "-c"]
-    command:
-      # Le SQL passe par stdin : psql n'interpole pas les variables dans -c
-      - |
-        psql -v ON_ERROR_STOP=1 -v pw="$$PGPASSWORD" -v jwtsecret="$$JWT_SECRET" <<'SQL'
-        ALTER USER authenticator WITH PASSWORD :'pw';
-        ALTER USER pgbouncer WITH PASSWORD :'pw';
-        ALTER USER supabase_auth_admin WITH PASSWORD :'pw';
-        ALTER USER supabase_storage_admin WITH PASSWORD :'pw';
-        ALTER DATABASE postgres SET "app.settings.jwt_secret" TO :'jwtsecret';
-        ALTER DATABASE postgres SET "app.settings.jwt_exp" TO '3600';
-        SQL
-    environment:
-      - PGHOST=supabase-db
-      - PGUSER=postgres
-      - PGPASSWORD=${SERVICE_PASSWORD_POSTGRES}
-      - PGDATABASE=postgres
-      - JWT_SECRET=${SERVICE_PASSWORD_JWT}
-    depends_on:
-      supabase-db:
-        condition: service_healthy
-    restart: "no"
-
   supabase-auth:
     image: supabase/gotrue:v2.186.0
     depends_on:
-      db-init:
-        condition: service_completed_successfully
+      supabase-db:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:9999/health"]
       timeout: 5s
@@ -193,8 +168,8 @@ services:
   supabase-rest:
     image: postgrest/postgrest:v14.6
     depends_on:
-      db-init:
-        condition: service_completed_successfully
+      supabase-db:
+        condition: service_healthy
     environment:
       - PGRST_DB_URI=postgres://authenticator:${SERVICE_PASSWORD_POSTGRES}@supabase-db:5432/postgres
       - PGRST_DB_SCHEMAS=public,storage,graphql_public
@@ -211,8 +186,8 @@ services:
   supabase-storage:
     image: supabase/storage-api:v1.44.2
     depends_on:
-      db-init:
-        condition: service_completed_successfully
+      supabase-db:
+        condition: service_healthy
       supabase-rest:
         condition: service_started
       imgproxy:

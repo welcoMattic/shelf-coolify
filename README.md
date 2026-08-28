@@ -98,7 +98,7 @@ curl -sS -o /dev/null -w "%{http_code}\n" https://shelf.example.com
 - **Les conteneurs `migrate` et `create-buckets` s'affichent "exited"** : normal, ce sont des jobs one-shot qui se terminent après avoir fait leur travail.
 - **Statut "unknown" juste après déploiement** : le healthcheck n'a pas encore réussi, attendez la grace period.
 - **Ne retirez pas `SERVICE_FQDN_SHELF_8080` ou `SERVICE_FQDN_SUPABASE_KONG_8000`** du compose : c'est ce qui déclare le routage proxy Coolify. Les domaines épinglés se réconcilient au premier déploiement.
-- **Repartir de zéro** (effacer toutes les données) : supprimez les volumes `supabase-db-data`, `supabase-db-config` et `supabase-storage-data` avant de redéployer. Le job `db-init` (mots de passe des rôles, secret JWT en base) est idempotent et rejoue à chaque déploiement.
+- **L'init de la base (mots de passe des rôles, secret JWT) ne joue qu'au premier boot d'un volume vierge**, en superuser via initdb (supautils interdit de modifier les rôles réservés ensuite). Pour repartir de zéro (effacer toutes les données), supprimez les volumes `supabase-db-data`, `supabase-db-config` et `supabase-storage-data` avant de redéployer.
 - **Les templates email sont chargés depuis raw.githubusercontent.com** : si vous forkez ce repo, adaptez les URLs `GOTRUE_MAILER_TEMPLATES_*` dans le compose pour pointer vers votre fork.
 
 ## Mise à jour
