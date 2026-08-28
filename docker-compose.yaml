@@ -1,5 +1,6 @@
-# docker-compose.yaml : compose adapté pour un service Coolify "Docker Compose (Empty)" ou un déploiement 1 clic via repo public.
-# Service applicatif + job one-shot de migrations Prisma.
+# shelf.nu + Supabase OSS auto-hébergé : stack complète pour Coolify (1 clic).
+# Lier ce repo public comme application "Docker Compose" dans Coolify : tout
+# démarre sans compte externe. Le SMTP ne conditionne que l'envoi d'emails.
 services:
   shelf:
     image: ghcr.io/shelf-nu/shelf.nu:latest
@@ -11,12 +12,13 @@ services:
       - SESSION_SECRET=${SERVICE_BASE64_64_SHELFSESSION}
       - INVITE_TOKEN_SECRET=${SERVICE_BASE64_64_SHELFINVITE}
       - FINGERPRINT=${SERVICE_BASE64_64_SHELFFINGERPRINT}
-      # Valeurs externes, à renseigner dans l'UI Coolify (voir .env.example)
-      - DATABASE_URL=${DATABASE_URL}
-      - DIRECT_URL=${DIRECT_URL}
-      - SUPABASE_URL=${SUPABASE_URL}
-      - SUPABASE_ANON_PUBLIC=${SUPABASE_ANON_PUBLIC}
-      - SUPABASE_SERVICE_ROLE=${SUPABASE_SERVICE_ROLE}
+      # Supabase OSS local (Postgres + Kong), tout est dans cette stack
+      - DATABASE_URL=postgres://postgres:${SERVICE_PASSWORD_POSTGRES}@supabase-db:5432/postgres
+      - DIRECT_URL=postgres://postgres:${SERVICE_PASSWORD_POSTGRES}@supabase-db:5432/postgres
+      - SUPABASE_URL=${SERVICE_URL_SUPABASEKONG}
+      - SUPABASE_ANON_PUBLIC=${SERVICE_SUPABASEANON_KEY}
+      - SUPABASE_SERVICE_ROLE=${SERVICE_SUPABASESERVICE_KEY}
+      # SMTP applicatif de shelf (invitations, réservations), voir .env.example
       - SMTP_HOST=${SMTP_HOST}
       - SMTP_PORT=${SMTP_PORT:-465}
       - SMTP_USER=${SMTP_USER}
@@ -30,6 +32,14 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
+      create-buckets:
+        condition: service_completed_successfully
+      supabase-kong:
+        condition: service_healthy
+      supabase-auth:
+        condition: service_healthy
+      supabase-storage:
+        condition: service_healthy
     healthcheck:
       # L'image (node:22-slim) n'a ni curl ni wget : on sonde avec node + fetch
       test: ["CMD", "node", "-e", "fetch('http://localhost:8080/healthcheck').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
@@ -39,15 +49,240 @@ services:
       start_period: 90s
     restart: unless-stopped
 
-  # Job one-shot : applique les migrations Prisma à chaque déploiement.
-  # S'affiche "exited" après exit 0 dans Coolify, c'est normal.
-  # working_dir /src : répertoire neutre, évite que la CLI prisma ne charge les
-  # prisma.config.ts présents dans l'image (ils requièrent des outils absents).
+  # Job one-shot : applique les migrations Prisma de shelf à chaque déploiement.
+  # working_dir /src : évite que la CLI prisma ne charge les prisma.config.ts de l'image.
   migrate:
     image: ghcr.io/shelf-nu/shelf.nu:latest
     working_dir: /src
     entrypoint: ["npx", "-y", "prisma@6.19.3", "migrate", "deploy", "--schema", "/src/packages/database/prisma/schema.prisma"]
     environment:
-      - DATABASE_URL=${DATABASE_URL}
-      - DIRECT_URL=${DIRECT_URL}
+      - DATABASE_URL=postgres://postgres:${SERVICE_PASSWORD_POSTGRES}@supabase-db:5432/postgres
+      - DIRECT_URL=postgres://postgres:${SERVICE_PASSWORD_POSTGRES}@supabase-db:5432/postgres
+    depends_on:
+      supabase-db:
+        condition: service_healthy
     restart: "no"
+
+  # Job one-shot : crée les 4 buckets attendus par shelf (idempotent).
+  create-buckets:
+    image: supabase/postgres:15.8.1.085
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >
+        psql -v ON_ERROR_STOP=1 -c "insert into storage.buckets (id, name, public) values
+        ('profile-pictures', 'profile-pictures', true),
+        ('assets', 'assets', false),
+        ('kits', 'kits', false),
+        ('files', 'files', true)
+        on conflict (id) do update set public = excluded.public;"
+    environment:
+      - PGHOST=supabase-db
+      - PGUSER=postgres
+      - PGPASSWORD=${SERVICE_PASSWORD_POSTGRES}
+      - PGDATABASE=postgres
+    depends_on:
+      supabase-storage:
+        condition: service_healthy
+    restart: "no"
+
+  supabase-db:
+    image: supabase/postgres:15.8.1.085
+    command:
+      - postgres
+      - -c
+      - config_file=/etc/postgresql/postgresql.conf
+      - -c
+      - log_min_messages=fatal
+    environment:
+      - POSTGRES_HOST=/var/run/postgresql
+      - PGPORT=5432
+      - POSTGRES_PORT=5432
+      - PGPASSWORD=${SERVICE_PASSWORD_POSTGRES}
+      - POSTGRES_PASSWORD=${SERVICE_PASSWORD_POSTGRES}
+      - PGDATABASE=postgres
+      - POSTGRES_DB=postgres
+      - JWT_SECRET=${SERVICE_PASSWORD_JWT}
+      - JWT_EXP=3600
+    volumes:
+      - supabase-db-data:/var/lib/postgresql/data
+      # Volume nommé : persiste la clé de déchiffrement pgsodium entre redémarrages
+      - supabase-db-config:/etc/postgresql-custom
+      # Scripts d'init (premier boot uniquement) : mots de passe des rôles + secret JWT
+      - ./supabase/db/roles.sql:/docker-entrypoint-initdb.d/init-scripts/99-roles.sql
+      - ./supabase/db/jwt.sql:/docker-entrypoint-initdb.d/init-scripts/99-jwt.sql
+    healthcheck:
+      test: pg_isready -U postgres -h 127.0.0.1
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  supabase-auth:
+    image: supabase/gotrue:v2.186.0
+    depends_on:
+      supabase-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:9999/health"]
+      timeout: 5s
+      interval: 5s
+      retries: 3
+    environment:
+      - GOTRUE_API_HOST=0.0.0.0
+      - GOTRUE_API_PORT=9999
+      - API_EXTERNAL_URL=${SERVICE_URL_SUPABASEKONG}
+      - GOTRUE_DB_DRIVER=postgres
+      - GOTRUE_DB_DATABASE_URL=postgres://supabase_auth_admin:${SERVICE_PASSWORD_POSTGRES}@supabase-db:5432/postgres
+      - GOTRUE_SITE_URL=${SERVICE_URL_SHELF}
+      - GOTRUE_URI_ALLOW_LIST=${SERVICE_URL_SHELF}/reset-password
+      - GOTRUE_DISABLE_SIGNUP=false
+      - GOTRUE_JWT_ADMIN_ROLES=service_role
+      - GOTRUE_JWT_AUD=authenticated
+      - GOTRUE_JWT_DEFAULT_GROUP_NAME=authenticated
+      - GOTRUE_JWT_EXP=3600
+      - GOTRUE_JWT_SECRET=${SERVICE_PASSWORD_JWT}
+      - GOTRUE_EXTERNAL_EMAIL_ENABLED=true
+      - GOTRUE_EXTERNAL_ANONYMOUS_USERS_ENABLED=false
+      - GOTRUE_EXTERNAL_PHONE_ENABLED=false
+      - GOTRUE_SMS_AUTOCONFIRM=false
+      - GOTRUE_MAILER_AUTOCONFIRM=false
+      # Shelf attend des OTP à 6 chiffres (défaut GoTrue, fixé par sécurité)
+      - GOTRUE_MAILER_OTP_LENGTH=6
+      # SMTP de GoTrue : envoie les codes OTP de connexion (voir .env.example)
+      - GOTRUE_SMTP_HOST=${SMTP_HOST}
+      - GOTRUE_SMTP_PORT=${SMTP_PORT:-465}
+      - GOTRUE_SMTP_USER=${SMTP_USER}
+      - GOTRUE_SMTP_PASS=${SMTP_PWD}
+      - GOTRUE_SMTP_ADMIN_EMAIL=${SMTP_ADMIN_EMAIL:-}
+      - GOTRUE_SMTP_SENDER_NAME=${SMTP_SENDER_NAME:-Shelf}
+      - GOTRUE_MAILER_URLPATHS_INVITE=/auth/v1/verify
+      - GOTRUE_MAILER_URLPATHS_CONFIRMATION=/auth/v1/verify
+      - GOTRUE_MAILER_URLPATHS_RECOVERY=/auth/v1/verify
+      - GOTRUE_MAILER_URLPATHS_EMAIL_CHANGE=/auth/v1/verify
+      # Templates OTP (shelf affiche le code, pas un magic link)
+      - GOTRUE_MAILER_TEMPLATES_CONFIRMATION=https://raw.githubusercontent.com/welcoMattic/shelf-coolify/main/supabase/templates/confirmation.html
+      - GOTRUE_MAILER_TEMPLATES_MAGIC_LINK=https://raw.githubusercontent.com/welcoMattic/shelf-coolify/main/supabase/templates/magic-link.html
+      - GOTRUE_MAILER_TEMPLATES_RECOVERY=https://raw.githubusercontent.com/welcoMattic/shelf-coolify/main/supabase/templates/recovery.html
+    restart: unless-stopped
+
+  supabase-rest:
+    image: postgrest/postgrest:v14.6
+    depends_on:
+      supabase-db:
+        condition: service_healthy
+    environment:
+      - PGRST_DB_URI=postgres://authenticator:${SERVICE_PASSWORD_POSTGRES}@supabase-db:5432/postgres
+      - PGRST_DB_SCHEMAS=public,storage,graphql_public
+      - PGRST_DB_MAX_ROWS=1000
+      - PGRST_DB_EXTRA_SEARCH_PATH=public
+      - PGRST_DB_ANON_ROLE=anon
+      - PGRST_JWT_SECRET=${SERVICE_PASSWORD_JWT}
+      - PGRST_DB_USE_LEGACY_GUCS=false
+      - PGRST_APP_SETTINGS_JWT_SECRET=${SERVICE_PASSWORD_JWT}
+      - PGRST_APP_SETTINGS_JWT_EXP=3600
+    command: "postgrest"
+    restart: unless-stopped
+
+  supabase-storage:
+    image: supabase/storage-api:v1.44.2
+    depends_on:
+      supabase-db:
+        condition: service_healthy
+      supabase-rest:
+        condition: service_started
+      imgproxy:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:5000/status"]
+      timeout: 5s
+      interval: 5s
+      retries: 3
+      start_period: 15s
+    environment:
+      - SERVER_PORT=5000
+      - SERVER_REGION=local
+      - MULTI_TENANT=false
+      - AUTH_JWT_SECRET=${SERVICE_PASSWORD_JWT}
+      - DATABASE_URL=postgres://supabase_storage_admin:${SERVICE_PASSWORD_POSTGRES}@supabase-db:5432/postgres
+      - DB_INSTALL_ROLES=false
+      - DATABASE_SEARCH_PATH=storage
+      # Backend fichier : les uploads vivent dans le volume supabase-storage-data
+      - STORAGE_BACKEND=file
+      - FILE_STORAGE_BACKEND_PATH=/var/lib/storage
+      - STORAGE_S3_BUCKET=stub
+      - GLOBAL_S3_BUCKET=stub
+      - FILE_SIZE_LIMIT=52428800
+      - UPLOAD_FILE_SIZE_LIMIT=524288000
+      - UPLOAD_FILE_SIZE_LIMIT_STANDARD=524288000
+      - UPLOAD_SIGNED_URL_EXPIRATION_TIME=120
+      - TUS_URL_PATH=/upload/resumable
+      - TUS_MAX_SIZE=3600000
+      - ENABLE_IMAGE_TRANSFORMATION=true
+      - IMGPROXY_URL=http://imgproxy:8080
+      - IMGPROXY_REQUEST_TIMEOUT=15
+      - NODE_ENV=production
+      - REQUEST_ALLOW_X_FORWARDED_PATH=true
+      - ANON_KEY=${SERVICE_SUPABASEANON_KEY}
+      - SERVICE_KEY=${SERVICE_SUPABASESERVICE_KEY}
+      - POSTGREST_URL=http://supabase-rest:3000
+      - PGRST_JWT_SECRET=${SERVICE_PASSWORD_JWT}
+      - STORAGE_PUBLIC_URL=${SERVICE_URL_SUPABASEKONG}
+      - TENANT_ID=storage-single-tenant
+    volumes:
+      - supabase-storage-data:/var/lib/storage
+    restart: unless-stopped
+
+  imgproxy:
+    image: darthsim/imgproxy:v3.30.1
+    healthcheck:
+      test: ["CMD", "imgproxy", "health"]
+      timeout: 5s
+      interval: 5s
+      retries: 3
+    environment:
+      - IMGPROXY_BIND=:8080
+      - IMGPROXY_LOCAL_FILESYSTEM_ROOT=/
+      - IMGPROXY_USE_ETAG=true
+      - IMGPROXY_AUTO_WEBP=true
+      - IMGPROXY_MAX_SRC_RESOLUTION=16.8
+    volumes:
+      - supabase-storage-data:/var/lib/storage
+    restart: unless-stopped
+
+  supabase-kong:
+    image: kong/kong:3.9.1
+    entrypoint: ["bash", "/home/kong/kong-entrypoint.sh"]
+    environment:
+      # FQDN public de l'API Supabase (utilisé par le navigateur), port 8000
+      - SERVICE_FQDN_SUPABASEKONG_8000
+      - KONG_PORT_MAPS=443:8000
+      - JWT_SECRET=${SERVICE_PASSWORD_JWT}
+      - KONG_DATABASE=off
+      - KONG_DECLARATIVE_CONFIG=/usr/local/kong/kong.yml
+      - KONG_DNS_ORDER=LAST,A,CNAME
+      - KONG_DNS_NOT_FOUND_TTL=1
+      - KONG_PLUGINS=request-transformer,cors,key-auth,acl,post-function
+      - KONG_NGINX_PROXY_PROXY_BUFFER_SIZE=160k
+      - KONG_NGINX_PROXY_PROXY_BUFFERS=64 160k
+      - KONG_PROXY_ACCESS_LOG=/dev/stdout combined
+      - SUPABASE_ANON_KEY=${SERVICE_SUPABASEANON_KEY}
+      - SUPABASE_SERVICE_KEY=${SERVICE_SUPABASESERVICE_KEY}
+      - KONG_STORAGE_CONNECT_TIMEOUT=60
+      - KONG_STORAGE_WRITE_TIMEOUT=3600
+      - KONG_STORAGE_READ_TIMEOUT=3600
+      - KONG_STORAGE_REQUEST_BUFFERING=false
+      - KONG_STORAGE_RESPONSE_BUFFERING=false
+    volumes:
+      - ./supabase/kong/kong-entrypoint.sh:/home/kong/kong-entrypoint.sh
+      - ./supabase/kong/kong.yml:/home/kong/temp.yml
+    healthcheck:
+      test: ["CMD", "kong", "health"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  supabase-db-data:
+  supabase-db-config:
+  supabase-storage-data:
