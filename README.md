@@ -93,7 +93,7 @@ Les deux peuvent pointer vers le même fournisseur.
 
 1. UI Coolify > + New > Public Repository
 2. URL du repo : `https://github.com/welcoMattic/shelf-coolify`, branche `main`
-3. Build pack : **Docker Compose** (le compose est à `/docker-compose.yml`, l'emplacement par défaut)
+3. Build pack : **Docker Compose** (le compose est à `/docker-compose.yaml`, l'emplacement par défaut)
 4. Créer, puis renseigner les variables de `.env.example` dans Environment Variables, associer le domaine au service shelf (port 8080), et Deploy.
 
 Équivalent CLI :
@@ -119,7 +119,7 @@ Avec le script :
 ```bash
 # Prévisualiser ce qui va partir, sans rien créer
 ./scripts/coolify-deploy-compose.py \
-  --compose ./docker-compose.yml \
+  --compose ./docker-compose.yaml \
   --name shelf \
   --domain shelf.example.com \
   --project "Mon Projet" \
@@ -127,7 +127,7 @@ Avec le script :
 
 # Créer le service (sans déployer : les variables restent à renseigner)
 ./scripts/coolify-deploy-compose.py \
-  --compose ./docker-compose.yml \
+  --compose ./docker-compose.yaml \
   --name shelf \
   --domain shelf.example.com \
   --project "Mon Projet"
@@ -138,7 +138,7 @@ Authentification du script :
 - priorité aux variables d'environnement `COOLIFY_URL` et `COOLIFY_TOKEN` ;
 - sinon lecture de `~/.config/coolify/config.json` (config de la CLI `coolify`) : instance marquée default, ou l'unique instance utilisable, avec `--context` pour en choisir une explicitement.
 
-Sans le script : UI Coolify > + New > Docker Compose Empty, collez le contenu de `docker-compose.yml`, associez votre domaine au service `shelf` (port 8080).
+Sans le script : UI Coolify > + New > Docker Compose Empty, collez le contenu de `docker-compose.yaml`, associez votre domaine au service `shelf` (port 8080).
 
 Note : cette option copie le compose dans Coolify au lieu de suivre le repo. Les mises à jour du compose passent alors par `--update`.
 
@@ -173,7 +173,7 @@ curl -sS -o /dev/null -w "%{http_code}\n" https://shelf.example.com
 - **Option B (script)** : une nouvelle version de shelf.nu ou une modification du compose se déploie via :
 
   ```bash
-  ./scripts/coolify-deploy-compose.py --compose ./docker-compose.yml --update <uuid-du-service> --deploy
+  ./scripts/coolify-deploy-compose.py --compose ./docker-compose.yaml --update <uuid-du-service> --deploy
   ```
 
 ## Ressources
