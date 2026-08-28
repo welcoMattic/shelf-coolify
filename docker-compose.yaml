@@ -114,7 +114,9 @@ services:
       test: pg_isready -U postgres -h 127.0.0.1
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 20
+      # L'initdb complète sur volume vierge dépasse la minute
+      start_period: 120s
     restart: unless-stopped
 
   supabase-auth:
