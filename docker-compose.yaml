@@ -15,7 +15,7 @@ services:
       # Supabase OSS local (Postgres + Kong), tout est dans cette stack
       - DATABASE_URL=postgres://postgres:${SERVICE_PASSWORD_POSTGRES}@supabase-db:5432/postgres
       - DIRECT_URL=postgres://postgres:${SERVICE_PASSWORD_POSTGRES}@supabase-db:5432/postgres
-      - SUPABASE_URL=${SERVICE_URL_SUPABASEKONG}
+      - SUPABASE_URL=${SERVICE_URL_SUPABASE_KONG}
       - SUPABASE_ANON_PUBLIC=${SERVICE_SUPABASEANON_KEY}
       - SUPABASE_SERVICE_ROLE=${SERVICE_SUPABASESERVICE_KEY}
       # SMTP applicatif de shelf (invitations, réservations), voir .env.example
@@ -155,7 +155,7 @@ services:
     environment:
       - GOTRUE_API_HOST=0.0.0.0
       - GOTRUE_API_PORT=9999
-      - API_EXTERNAL_URL=${SERVICE_URL_SUPABASEKONG}
+      - API_EXTERNAL_URL=${SERVICE_URL_SUPABASE_KONG}
       - GOTRUE_DB_DRIVER=postgres
       - GOTRUE_DB_DATABASE_URL=postgres://supabase_auth_admin:${SERVICE_PASSWORD_POSTGRES}@supabase-db:5432/postgres
       - GOTRUE_SITE_URL=${SERVICE_URL_SHELF}
@@ -251,7 +251,7 @@ services:
       - SERVICE_KEY=${SERVICE_SUPABASESERVICE_KEY}
       - POSTGREST_URL=http://supabase-rest:3000
       - PGRST_JWT_SECRET=${SERVICE_PASSWORD_JWT}
-      - STORAGE_PUBLIC_URL=${SERVICE_URL_SUPABASEKONG}
+      - STORAGE_PUBLIC_URL=${SERVICE_URL_SUPABASE_KONG}
       - TENANT_ID=storage-single-tenant
     volumes:
       - supabase-storage-data:/var/lib/storage
@@ -280,7 +280,7 @@ services:
     build: ./supabase/kong
     environment:
       # FQDN public de l'API Supabase (utilisé par le navigateur), port 8000
-      - SERVICE_FQDN_SUPABASEKONG_8000
+      - SERVICE_FQDN_SUPABASE_KONG_8000
       - KONG_PORT_MAPS=443:8000
       - JWT_SECRET=${SERVICE_PASSWORD_JWT}
       - KONG_DATABASE=off

@@ -69,7 +69,7 @@ curl -X PATCH https://<votre-coolify>/api/v1/applications/<uuid> \
   }}'
 ```
 
-Les magic vars `SERVICE_URL_SHELF` et `SERVICE_URL_SUPABASEKONG` se réconcilient sur ces domaines au déploiement suivant.
+Les magic vars `SERVICE_URL_SHELF` et `SERVICE_URL_SUPABASE_KONG` se réconcilient sur ces domaines au déploiement suivant.
 
 Note : le premier déploiement est requis avant le PATCH pour que Coolify connaisse les services du compose.
 
@@ -97,8 +97,8 @@ curl -sS -o /dev/null -w "%{http_code}\n" https://shelf.example.com
 
 - **Les conteneurs `migrate` et `create-buckets` s'affichent "exited"** : normal, ce sont des jobs one-shot qui se terminent après avoir fait leur travail.
 - **Statut "unknown" juste après déploiement** : le healthcheck n'a pas encore réussi, attendez la grace period.
-- **Ne retirez pas `SERVICE_FQDN_SHELF_8080` ou `SERVICE_FQDN_SUPABASEKONG_8000`** du compose : c'est ce qui déclare le routage proxy Coolify. Les domaines épinglés se réconcilient au premier déploiement.
-- **L'init SQL de la base ne joue qu'au premier boot du volume** : pour repartir de zéro (effacer toutes les données), supprimez les volumes `supabase-db-data`, `supabase-db-config` et `supabase-storage-data` dans l'UI Coolify avant de redéployer.
+- **Ne retirez pas `SERVICE_FQDN_SHELF_8080` ou `SERVICE_FQDN_SUPABASE_KONG_8000`** du compose : c'est ce qui déclare le routage proxy Coolify. Les domaines épinglés se réconcilient au premier déploiement.
+- **Repartir de zéro** (effacer toutes les données) : supprimez les volumes `supabase-db-data`, `supabase-db-config` et `supabase-storage-data` avant de redéployer. Le job `db-init` (mots de passe des rôles, secret JWT en base) est idempotent et rejoue à chaque déploiement.
 - **Les templates email sont chargés depuis raw.githubusercontent.com** : si vous forkez ce repo, adaptez les URLs `GOTRUE_MAILER_TEMPLATES_*` dans le compose pour pointer vers votre fork.
 
 ## Mise à jour
