@@ -162,6 +162,7 @@ curl -sS -o /dev/null -w "%{http_code}\n" https://shelf.example.com
 
 - **OTP à 8 chiffres** : le défaut Supabase casse le login shelf. OTP Length = 6 (étape 1.5).
 - **Le conteneur `migrate` s'affiche "exited"** : normal, c'est un job one-shot qui se termine après avoir appliqué les migrations.
+- **Déploiement en échec tant que les variables sont vides** : si vous déployez avant d'avoir renseigné `DATABASE_URL`/`DIRECT_URL`, `migrate` sort en exit 1 (erreur de validation Prisma) et le déploiement est marqué failed. Renseignez les variables puis redéployez.
 - **Statut "unknown" juste après déploiement** : le healthcheck n'a pas encore réussi, attendez la grace period.
 - **Ne retirez pas `SERVICE_FQDN_SHELF_8080`** du compose : c'est ce qui déclare le routage proxy Coolify. Le domaine épinglé se réconcilie au premier déploiement.
 - **Mailer Supabase par défaut rate-limité** : configurez le SMTP côté Supabase (étape 1.8), sinon les OTP cessent d'arriver après quelques connexions.
