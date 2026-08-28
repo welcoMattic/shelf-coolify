@@ -95,7 +95,9 @@ curl -sS -o /dev/null -w "%{http_code}\n" https://shelf.example.com
 
 ## Pièges connus
 
+- **Clés `SERVICE_SUPABASEANON_KEY` / `SERVICE_SUPABASESERVICE_KEY` vides après le premier déploiement** : Coolify les génère en les signant avec `SERVICE_PASSWORD_JWT`, qui peut ne pas encore exister au premier parse. Symptôme : shelf boucle sur "SUPABASE_ANON_PUBLIC is not set". Remède : supprimer les deux lignes vides dans Environment Variables puis redéployer, elles se régénèrent correctement.
 - **Les conteneurs `migrate` et `create-buckets` s'affichent "exited"** : normal, ce sont des jobs one-shot qui se terminent après avoir fait leur travail.
+- **`supabase-rest` reste sans état "healthy"** : l'image PostgREST est distroless (pas de shell), aucun healthcheck n'est défini, c'est attendu.
 - **Statut "unknown" juste après déploiement** : le healthcheck n'a pas encore réussi, attendez la grace period.
 - **Ne retirez pas `SERVICE_FQDN_SHELF_8080` ou `SERVICE_FQDN_SUPABASE_KONG_8000`** du compose : c'est ce qui déclare le routage proxy Coolify. Les domaines épinglés se réconcilient au premier déploiement.
 - **L'init de la base (mots de passe des rôles, secret JWT) ne joue qu'au premier boot d'un volume vierge**, en superuser via initdb (supautils interdit de modifier les rôles réservés ensuite). Pour repartir de zéro (effacer toutes les données), supprimez les volumes `supabase-db-data`, `supabase-db-config` et `supabase-storage-data` avant de redéployer.
