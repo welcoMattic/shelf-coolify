@@ -114,3 +114,7 @@ curl -sS -o /dev/null -w "%{http_code}\n" https://shelf.example.com
 - Supabase self-hosting : [https://supabase.com/docs/guides/self-hosting/docker](https://supabase.com/docs/guides/self-hosting/docker)
 - Template Supabase de Coolify : [coollabsio/coolify](https://github.com/coollabsio/coolify/blob/main/templates/compose/supabase.yaml)
 - Licence : [MIT](./LICENSE)
+
+## Sponsors
+
+Si ce projet vous est utile, vous pouvez soutenir mon travail open source sur [GitHub Sponsors](https://github.com/sponsors/welcoMattic). Les paliers et ce qu'ils financent : [blog.welcomattic.com/sponsors](https://blog.welcomattic.com/sponsors/). À partir du palier Company (100 $ par mois), votre logo et un lien apparaissent ici.
